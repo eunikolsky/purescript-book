@@ -103,11 +103,12 @@ This looks very similar to the API provided by the `REF` and `ST` effects. Howev
 Let's see an example. One use of the `State` monad might be to add the values in an array of numbers to the current state. We could do that by choosing `Number` as the state type `s`, and using `traverse_` to traverse the array, with a call to `modify` for each array element:
 
 ```haskell
+import Prelude
 import Data.Foldable (traverse_)
 import Control.Monad.State
 import Control.Monad.State.Class
 
-sumArray :: Array Number -> State Number Unit
+sumArray :: Array Int -> State Int Unit
 sumArray = traverse_ \n -> modify \sum -> sum + n
 ```
 
@@ -227,7 +228,7 @@ X>
 X>    type Doc = Reader Level String
 X>    ```
 X>
-X> 1. (Easy) Write a function `line` which renders a function at the current indentation level. Your function should have the following type:
+X> 1. (Easy) Write a function `line` which renders a string at the current indentation level. Your function should have the following type:
 X>
 X>     ```haskell
 X>     line :: String -> Doc
@@ -366,7 +367,7 @@ Let's see an example. The monad transformer version of the `State` monad is `Sta
 ```text
 > import Control.Monad.State.Trans
 > :kind StateT
-* -> (* -> *) -> * -> *
+Type -> (Type -> Type) -> Type -> Type
 ```
 
 This looks quite confusing, but we can apply `StateT` one argument at a time to understand how to use it.
@@ -375,24 +376,25 @@ The first type argument is the type of the state we wish to use, as was the case
 
 ```text
 > :kind StateT String
-(* -> *) -> * -> *
+(Type -> Type) -> Type -> Type
 ```
 
-The next argument is a type constructor of kind `* -> *`. It represents the underlying monad, which we want to add the effects of `StateT` to. For the sake of an example, let's choose the `Either String` monad:
+The next argument is a type constructor of kind `Type -> Type`. It represents the underlying monad, which we want to add the effects of `StateT` to. For the sake of an example, let's choose the `Either String` monad:
 
 ```text
+> import Data.Either
 > :kind StateT String (Either String)
-* -> *
+Type -> Type
 ```
 
 We are left with a type constructor. The final argument represents the return type, and we might instantiate it to `Number` for example:
 
 ```text
 > :kind StateT String (Either String) Number
-*
+Type
 ```
 
-Finally we are left with something of kind `*`, which means we can try to find values of this type.
+Finally we are left with something of kind `Type`, which means we can try to find values of this type.
 
 The monad we have constructed - `StateT String (Either String)` - represents computations which can fail with an error, and which can use mutable state.
 
@@ -408,6 +410,7 @@ This class contains a single member, `lift`, which takes computations in any und
 For example, the following computation reads the underlying state, and then throws an error if the state is the empty string:
 
 ```haskell
+import Data.Either
 import Data.String (drop, take)
 
 split :: StateT String (Either String) String
@@ -462,7 +465,7 @@ The `runExceptT` handler is used to run a computation of type `ExceptT e m a`.
 This API is similar to that provided by the `purescript-exceptions` package and the `Exception` effect. However, there are some important differences:
 
 - `Exception` uses actual JavaScript exceptions, whereas `ExceptT` models errors as a pure data structure.
-- The `Exception` effect only supports exceptions of one type, namely JavaScript's `Error` type, whereas `ExceptT` supports errors of type. In particular, we are free to define new error types.
+- The `Exception` effect only supports exceptions of one type, namely JavaScript's `Error` type, whereas `ExceptT` supports errors of any type. In particular, we are free to define new error types.
 
 Let's try out `ExceptT` by using it to wrap the `Writer` monad. Again, we are free to use actions from the monad transformer `ExceptT e` directly, but computations in the `Writer` monad should be lifted using `lift`:
 
@@ -476,16 +479,16 @@ import Control.Monad.Except.Trans
 writerAndExceptT :: ExceptT String (Writer (Array String)) String
 writerAndExceptT = do
   lift $ tell ["Before the error"]
-  throwError "Error!"
+  _ <- throwError "Error!"
   lift $ tell ["After the error"]
   pure "Return value"
 ```
 
-If we test this function in PSCi, we can see how the two effects of accumulating a log and throwing an error interact. First, we can run the outer `ExceptT` computation of type by using `runExceptT`, leaving a result of type `Writer String (Either String String)`. We can then use `runWriter` to run the inner `Writer` computation:
+If we test this function in PSCi, we can see how the two effects of accumulating a log and throwing an error interact. First, we can run the outer `ExceptT` computation of type by using `runExceptT`, leaving a result of type `Writer (Array String) (Either String String)`. We can then use `runWriter` to run the inner `Writer` computation:
 
 ```text
 > runWriter $ runExceptT writerAndExceptT
-Tuple (Left "Error!") ["Before the error"]
+(Tuple (Left "Error!") ["Before the error"])
 ```
 
 Note that only those log messages which were written before the error was thrown actually get appended to the log.
@@ -510,7 +513,7 @@ type Parser = StateT String (WriterT Log (ExceptT Errors Identity))
 split :: Parser String
 split = do
   s <- get
-  lift $ tell ["The state is " <> show s]
+  lift $ tell ["The state is " <> s]
   case s of
     "" -> lift $ lift $ throwError ["Empty string"]
     _ -> do
@@ -520,10 +523,10 @@ split = do
 
 If we test this computation in PSCi, we see that the state is appended to the log for every invocation of `split`.
 
-Note that we have to remove the side-effects in the order in which they appear in the monad transformer stack: first we use `runStateT` to remove the `StateT` type constructor, then `runWriterT`, then `runExceptT`. Finally, we run the computation in the `Identity` monad by using `runIdentity`.
+Note that we have to remove the side-effects in the order in which they appear in the monad transformer stack: first we use `runStateT` to remove the `StateT` type constructor, then `runWriterT`, then `runExceptT`. Finally, we run the computation in the `Identity` monad by using `unwrap`.
 
 ```text
-> runParser p s = runIdentity $ runExceptT $ runWriterT $ runStateT p s
+> runParser p s = unwrap $ runExceptT $ runWriterT $ runStateT p s
 
 > runParser split "test"
 (Right (Tuple (Tuple "t" "est") ["The state is test"]))
@@ -637,7 +640,7 @@ In the case of our `Parser` monad transformer stack, there is an instance of `Al
 
 ```text
 > import Split
-> import Control.Alternative
+> import Data.List
 
 > runParser (many split) "test"
 (Right (Tuple (Tuple ["t", "e", "s", "t"] "")
@@ -776,8 +779,8 @@ It defines the player name, and a flag which indicates whether or not the game i
 The mutable state is defined in a type called `GameState` in the `Data.GameState` module:
 
 ```haskell
-import qualified Data.Map as M
-import qualified Data.Set as S
+import Data.Map as M
+import Data.Set as S
 
 newtype GameState = GameState
   { items       :: M.Map Coords (S.Set GameItem)
@@ -955,7 +958,7 @@ lineHandler
          | eff
          ) Unit
 lineHandler currentState input = do
-  case runRWS (game (split " " input)) env currentState of
+  case runRWS (game (split (wrap " ") input)) env currentState of
     RWSResult state _ written -> do
       for_ written log
       setLineHandler interface $ lineHandler state
