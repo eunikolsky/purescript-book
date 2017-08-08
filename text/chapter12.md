@@ -14,7 +14,7 @@ npm install
 
 ## The Problem
 
-Asynchronous code in JavaScript typically uses _callbacks_ to structure program flow. For example, to read text from a file, the preferred approach is to use the `readFile` function and to pass a callback - a function that will be called when the text is available:
+Asynchronous code in JavaScript typically uses _callbacks_ to structure program flow. For example, to read text from a file, the preferred approach is to use the `readFile` function and to pass a callback – a function that will be called when the text is available:
 
 ```javascript
 function readText(onSuccess, onFailure) {
@@ -24,7 +24,7 @@ function readText(onSuccess, onFailure) {
       onFailure(error.code);
     } else {
       onSuccess(data);
-    }   
+    }
   });
 }
 ```
@@ -45,7 +45,7 @@ function copyFile(onSuccess, onFailure) {
           onSuccess();
         }
       });
-    }   
+    }
   });
 }
 ```
@@ -71,7 +71,7 @@ function copyFile(onSuccess, onFailure) {
       onFailure(error.code);
     } else {
       writeCopy(data, onSuccess, onFailure);
-    }   
+    }
   });
 }
 ```
@@ -85,14 +85,14 @@ Next, we will see how to use the techniques we have learned so far to solve thes
 
 ## The Continuation Monad
 
-Let's translate the `copyFile` example above into PureScript by using the FFI. In doing so, the structure of the computation will become apparent, and we will be led naturally to a monad transformer which is defined in the `purescript-transformers` package - the continuation monad transformer `ContT`.
+Let's translate the `copyFile` example above into PureScript by using the FFI. In doing so, the structure of the computation will become apparent, and we will be led naturally to a monad transformer which is defined in the `purescript-transformers` package — the continuation monad transformer `ContT`.
 
 _Note_: in practice, it is not necessary to write these functions by hand every time. Asynchronous file IO functions can be found in the `purescript-node-fs` and `purescript-node-fs-aff` libraries.
 
 First, we need to gives types to `readFile` and `writeFile` using the FFI. Let's start by defining some type synonyms, and a new effect for file IO:
 
 ```haskell
-foreign import data FS :: !
+foreign import data FS :: Effect
 
 type ErrorCode = String
 type FilePath = String
@@ -269,7 +269,7 @@ X>
 X>     ```haskell
 X>     type Milliseconds = Int
 X>
-X>     foreign import data TIMEOUT :: !
+X>     foreign import data TIMEOUT :: Effect
 X>
 X>     setTimeoutCont
 X>       :: forall eff
@@ -324,7 +324,7 @@ X>
 X> 1. (Medium) Modify your solution which concatenated two files, using `ExceptT` to handle any errors.
 X> 1. (Medium) Write a function `concatenateMany` to concatenate multiple text files, given an array of input file names. _Hint_: use `traverse`.
 
-## A HTTP Client
+## An HTTP Client
 
 As another example of using `ContT` to handle asynchronous functions, we'll now look at the `Network.HTTP.Client` module from this chapter's source code. This module uses the `Async` monad to support asynchronous HTTP requests using the `request` module, which is available via NPM.
 
@@ -345,7 +345,7 @@ We will recreate this simple example in PureScript using the `Async` monad.
 In the `Network.HTTP.Client` module, the `request` method is wrapped with a function `getImpl`:
 
 ```haskell
-foreign import data HTTP :: !
+foreign import data HTTP :: Effect
 
 type URI = String
 
@@ -389,7 +389,7 @@ X> 1. (Difficult) Write a function which saves the response body of a request to
 
 ## Parallel Computations
 
-We've seen how to use the `ContT` monad and do notation to compose asynchronous computations in sequence. It would also be useful to be able to compose asynchronous computations _in parallel_.
+We've seen how to use the `ContT` monad and `do` notation to compose asynchronous computations in sequence. It would also be useful to be able to compose asynchronous computations _in parallel_.
 
 If we are using `ContT` to transform the `Eff` monad, then we can compute in parallel simply by initiating our two computations one after the other.
 
@@ -415,7 +415,7 @@ import Prelude
 import Control.Apply (lift2)
 import Control.Monad.Cont.Trans (runContT)
 import Control.Monad.Eff.Console (logShow)
-import Control.Monad.Parallel (parallel, sequential)
+import Control.Parallel (parallel, sequential)
 
 main = flip runContT logShow do
   sequential $
@@ -432,7 +432,7 @@ We can also combine parallel computations with sequential portions of code, by u
 
 X> ## Exercises
 X>
-X> 1. (Easy) Use `parallel` and `sequential` to make two HTTP requests and collect their response bodies in parallel. Your combining function should concatenate the two response bodies, and your continuation should use `print` to print the result to the console.
+X> 1. (Easy) Use `parallel` and `sequential` to make two HTTP requests and collect their response bodies in parallel. Your combining function should concatenate the two response bodies, and your continuation should use `logShow` to print the result to the console.
 X> 1. (Medium) The applicative functor which corresponds to `Async` is also an instance of `Alternative`. The `<|>` operator defined by this instance runs two computations in parallel, and returns the result from the computation which completes first.
 X>
 X>     Use this `Alternative` instance in conjunction with your `setTimeoutCont` function to define a function
